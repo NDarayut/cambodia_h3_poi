@@ -135,7 +135,11 @@ def run_all(force: ForceOpt = False) -> None:
             typer.echo(f"skip {name} (disabled in config)")
             continue
         typer.echo(f"== {name}")
-        fn(cfg, force)
+        try:
+            fn(cfg, force)
+        except NotImplementedError as e:
+            typer.echo(f"stop: {e} (all earlier stages finished)")
+            return
 
 
 if __name__ == "__main__":

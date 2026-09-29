@@ -44,7 +44,7 @@ def test_hex_sum_conserves_total_at_each_res(tmp_path):
     _tif(tmp_path / "p.tif", arr)
     total = raster_to_pixels(tmp_path / "p.tif", tmp_path / "px.parquet")
     con = duckdb.connect()
-    con.execute("LOAD h3; LOAD spatial;")
+    con.execute("INSTALL h3 FROM community; LOAD h3; INSTALL spatial; LOAD spatial;")
     px = tmp_path / "px.parquet"
     for res in (7, 8):
         grid = tmp_path / f"grid{res}.parquet"

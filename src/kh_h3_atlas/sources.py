@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import asdict, dataclass
@@ -43,9 +44,35 @@ class ResolvedSource:
         return d
 
 
-def _get(url: str) -> str:
-    with urllib.request.urlopen(url, timeout=30) as r:
-        return r.read().decode()
+def _get(url: str, attempts: int = 3) -> str:
+    for i in range(attempts):
+        try:
+            with urllib.request.urlopen(url, timeout=30) as r:
+                return r.read().decode()
+        except OSError as e:  # URLError, TimeoutError, connection resets
+            if i == attempts - 1:
+                raise
+            log.warning("fetch failed (%s), retrying: %s", e, url)
+            time.sleep(2 * (i + 1))
+    raise AssertionError("unreachable")
+
+
+def _cached(cfg: Config, source: str) -> list[str]:
+    """Snapshot directory names already downloaded under data/raw/<source>/."""
+    d = cfg.paths.raw / source
+    return sorted(p.name for p in d.iterdir() if p.is_dir()) if d.exists() else []
+
+
+def _listing_or_cache(cfg: Config, source: str, fetch, parse_cached):
+    """Online listing; if the index is unreachable, fall back to cached raw snapshots."""
+    try:
+        return fetch()
+    except OSError as e:
+        cached = parse_cached(_cached(cfg, source))
+        if not cached:
+            raise
+        log.warning("%s index unreachable (%s); using cached snapshots: %s", source, e, cached)
+        return cached
 
 
 # --- Overture ---------------------------------------------------------------------------
@@ -128,7 +155,13 @@ def resolve_sources(cfg: Config) -> list[ResolvedSource]:
 
     rel = ov.release
     if rel == "auto":
-        rel = pick_overture_release(list_overture_releases(ov.s3_bucket, ov.s3_region), ref)
+        releases = _listing_or_cache(
+            cfg,
+            "overture",
+            lambda: list_overture_releases(ov.s3_bucket, ov.s3_region),
+            lambda names: [n for n in names if _RELEASE_RE.match(n)],
+        )
+        rel = pick_overture_release(releases, ref)
     s3 = f"s3://{ov.s3_bucket}/release/{rel}"
     rel_date = overture_release_date(rel)
     out.append(
@@ -158,7 +191,17 @@ def resolve_sources(cfg: Config) -> list[ResolvedSource]:
     if cfg.poi.use.get("osm"):
         osm = cfg.sources.osm
         if osm.snapshot == "auto":
-            snap_date, stamp = pick_osm_snapshot(list_osm_snapshots(osm.region_path), ref)
+            snapshots = _listing_or_cache(
+                cfg,
+                "osm",
+                lambda: list_osm_snapshots(osm.region_path),
+                lambda names: {
+                    datetime.strptime(n, "%y%m%d").date(): n
+                    for n in names
+                    if re.fullmatch(r"\d{6}", n)
+                },
+            )
+            snap_date, stamp = pick_osm_snapshot(snapshots, ref)
         else:
             stamp = osm.snapshot
             snap_date = datetime.strptime(stamp, "%y%m%d").date()

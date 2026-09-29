@@ -12,7 +12,7 @@ ISLET = "POLYGON((104.704 11.300, 104.705 11.300, 104.705 11.301, 104.704 11.301
 @pytest.fixture
 def con(tmp_path):
     c = duckdb.connect()
-    c.execute("LOAD h3; LOAD spatial;")
+    c.execute("INSTALL h3 FROM community; LOAD h3; INSTALL spatial; LOAD spatial;")
     path = tmp_path / "boundary.parquet"
     c.execute(
         f"COPY (SELECT 1 AS part_id, ST_GeomFromText('{SQUARE}') AS geometry UNION ALL "
@@ -48,7 +48,7 @@ def test_overlap_is_superset_and_keeps_islet(con, tmp_path):
 
 def test_check_rejects_duplicates(tmp_path):
     c = duckdb.connect()
-    c.execute("LOAD h3;")
+    c.execute("INSTALL h3 FROM community; LOAD h3;")
     out = tmp_path / "dup.parquet"
     cell = h3.str_to_int(h3.latlng_to_cell(11.55, 104.9, 8))
     c.execute(f"COPY (SELECT {cell}::UBIGINT AS h3 FROM range(2)) TO '{out}' (FORMAT parquet)")
