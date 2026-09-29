@@ -1,8 +1,5 @@
-# Generated data is not tracked, except the QGIS-ready layers in data/interim/qgis/.
-/data/*
-!/data/interim/
-/data/interim/*
-!/data/interim/qgis/
+# Generated data is not tracked; run the pipeline to create it.
+/data/
 *.gpkg-wal
 *.gpkg-shm
 *.tif
