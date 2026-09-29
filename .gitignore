@@ -1,5 +1,14 @@
-data/
+# Generated data is not tracked, except the QGIS-ready layers and the WorldPop raster
+# used by the projects in qgis/ (so they open right after cloning).
+/data/*
+!/data/interim/
+/data/interim/*
+!/data/interim/qgis/
+*.gpkg-wal
+*.gpkg-shm
 *.tif
+!/khm_pop_2026_CN_100m_R2025A_v1.tif
+
 .venv/
 __pycache__/
 .pytest_cache/
