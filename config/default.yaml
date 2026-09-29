@@ -1,0 +1,57 @@
+# kh-h3-atlas default configuration
+
+country_iso2: KH
+country_iso3: KHM
+
+# Temporal alignment: every source resolves to its latest snapshot ON OR BEFORE this date,
+# so no layer contains data newer than the others. Change this one value to rebuild the
+# atlas for a different point in time.
+reference_date: 2026-09-23
+# Warn if a resolved snapshot is older than this many days before reference_date.
+max_source_lag_days: 45
+
+# Coarse prefilter only; includes parts of TH/LA/VN, so always clip to the grid.
+bbox: {xmin: 102.3, xmax: 107.7, ymin: 9.9, ymax: 14.7}
+
+sources:
+  overture:            # boundary (divisions) + POIs (places)
+    release: auto      # auto = latest on/before reference_date, or pin e.g. "2026-09-23.1"
+    s3_bucket: overturemaps-us-west-2
+    s3_region: us-west-2
+  worldpop:            # population, 100m raster
+    release: R2025A
+    version: v1
+    year: auto         # auto = reference_date year
+    resolution: 100m
+    constrained: true  # true = people only where buildings detected
+  osm:                 # POIs, Geofabrik country extract
+    snapshot: auto     # auto = latest on/before reference_date, or pin e.g. "260923"
+    region_path: asia/cambodia
+
+h3:
+  resolutions: [8]          # start with one; add 7 and 9 later (res 9 polyfill takes ~7+ min)
+  poi_index_res: 11    # finest res stored on POIs, used for dedupe
+
+grid:
+  containment: overlap # overlap = every cell touching Cambodia (keeps coast, border, small
+                       # islands); center = only cells whose centre is inside (brief default)
+  buffer_m: 0          # grow the boundary before polyfill (metres)
+
+poi:
+  min_confidence: 0.6  # Overture only
+  use: {osm: true, overture: false, fsq: false}   # OSM only (user choice 2026-09-29)
+
+features:
+  neighborhood_k: [1, 2]
+  coverage_flag_min_pop: 200
+
+output:
+  gpkg: true           # primary, for QGIS
+  geoparquet: true
+  csv: true
+  qgis_project: true
+
+paths:
+  raw: data/raw
+  interim: data/interim
+  processed: data/processed

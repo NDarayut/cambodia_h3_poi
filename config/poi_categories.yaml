@@ -1,0 +1,105 @@
+# POI category groups -> OSM tag patterns ("key=value", or "key=*" for any value).
+# Seeded from `kh-atlas explore-categories` (OSM 2026-09-23; counts in data/interim/categories_osm.csv).
+#
+# Rules:
+#   - Groups are checked in the order listed; a POI goes to the FIRST group it matches,
+#     so it is never counted twice. Keep wildcard groups (retail: shop=*) last.
+#   - POIs matching no group still count toward n_poi (e.g. attractions, parks, offices).
+#   - Each group becomes a feature column n_<group> (n_health, n_education, ...).
+
+groups:
+  health:
+    osm:
+      - amenity=hospital
+      - amenity=clinic
+      - amenity=doctors
+      - amenity=dentist
+      - amenity=pharmacy
+      - amenity=nursing_home
+      - healthcare=*
+
+  education:
+    osm:
+      - amenity=school
+      - amenity=kindergarten
+      - amenity=childcare
+      - amenity=college
+      - amenity=university
+      - amenity=language_school
+      - amenity=driving_school
+      - amenity=library
+      - office=educational_institution
+
+  finance:
+    osm:
+      - amenity=bank
+      - amenity=atm
+      - amenity=bureau_de_change
+      - amenity=money_transfer
+      - office=insurance
+      - shop=pawnbroker
+      - shop=money_lender
+
+  religious:
+    osm:
+      - amenity=place_of_worship   # pagodas (wat), mosques, churches
+      - amenity=monastery
+      - historic=wayside_shrine
+
+  government:
+    osm:
+      - office=government
+      - amenity=townhall
+      - amenity=police
+      - amenity=courthouse
+      - amenity=fire_station
+      - amenity=post_office
+      - amenity=prison
+      - amenity=public_building
+      - amenity=community_centre   # often commune/village halls in Cambodia
+      - amenity=checkpoint
+      - office=diplomatic
+
+  transport:
+    osm:
+      - amenity=bus_station
+      - amenity=ferry_terminal
+      - amenity=fuel
+      - amenity=charging_station
+      - amenity=taxi
+      - amenity=car_rental
+      - amenity=motorcycle_rental
+      - amenity=bicycle_rental
+      - amenity=boat_rental
+      - public_transport=station
+      - railway=station
+      - railway=halt
+      - aeroway=aerodrome
+      - aeroway=terminal
+
+  food:
+    osm:
+      - amenity=restaurant
+      - amenity=cafe
+      - amenity=fast_food
+      - amenity=food_court
+      - amenity=ice_cream
+      - amenity=bar
+      - amenity=pub
+      - amenity=nightclub
+
+  lodging:
+    osm:
+      - tourism=hotel
+      - tourism=guest_house
+      - tourism=hostel
+      - tourism=motel
+      - tourism=apartment
+      - tourism=chalet
+      - tourism=camp_site
+      - leisure=resort
+
+  retail:   # wildcard: keep last
+    osm:
+      - amenity=marketplace
+      - shop=*   # includes service shops (hairdresser, laundry, repair)
