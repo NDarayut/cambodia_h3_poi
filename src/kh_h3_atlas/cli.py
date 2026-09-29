@@ -125,6 +125,20 @@ def explore_categories(top: int = 200) -> None:
             typer.echo(f"{n:>8,}  {cat}  [{lvl}]")
 
 
+@app.command("app")
+def compare_app(
+    port: int = 8765,
+    serve: Annotated[bool, typer.Option(help="Start a local web server.")] = True,
+) -> None:
+    """Open the POI comparison app: hexagons + our POIs vs your ground-truth file."""
+    from kh_h3_atlas import app as poi_app
+
+    out = poi_app.export(_cfg())
+    typer.echo(f"app files in {out}")
+    if serve:
+        poi_app.serve(out, port)
+
+
 @app.command("run-all")
 def run_all(force: ForceOpt = False) -> None:
     """Resolve sources, then run every enabled stage in order."""

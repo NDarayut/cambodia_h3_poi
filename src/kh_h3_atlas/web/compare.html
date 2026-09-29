@@ -1,0 +1,664 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>POI Compare</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css">
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/h3-js@4.5.0/dist/h3-js.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.5.3/papaparse.min.js"></script>
+<style>
+:root {
+  --surface-0: #f4f3f0;
+  --surface-1: #fcfcfb;
+  --border: #dedcd6;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #7a7973;
+  --accent: #2a78d6;
+  --ours: #2a78d6;
+  --gt: #eb6834;
+  --row-hover: #eef3fb;
+  --sel: #0d366b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --surface-0: #121211;
+    --surface-1: #1a1a19;
+    --border: #383835;
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted: #8f8e86;
+    --accent: #3987e5;
+    --ours: #3987e5;
+    --gt: #d95926;
+    --row-hover: #23303f;
+    --sel: #cde2fb;
+  }
+}
+:root[data-theme="dark"] {
+  --surface-0: #121211; --surface-1: #1a1a19; --border: #383835;
+  --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
+  --accent: #3987e5; --ours: #3987e5; --gt: #d95926; --row-hover: #23303f; --sel: #cde2fb;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--surface-0); color: var(--text-primary);
+  font: 13px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans Khmer", sans-serif;
+  display: grid; grid-template-columns: 380px 1fr; height: 100vh; overflow: hidden;
+}
+#panel { background: var(--surface-1); border-right: 1px solid var(--border); overflow-y: auto; }
+#map { position: relative; }
+section { padding: 14px 16px; border-bottom: 1px solid var(--border); }
+h1 { font-size: 16px; margin: 0 0 2px; }
+h2 { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-secondary);
+     margin: 0 0 10px; font-weight: 600; }
+.muted { color: var(--text-muted); }
+.small { font-size: 12px; }
+label.field { display: grid; grid-template-columns: 96px 1fr; align-items: center; gap: 8px; margin: 6px 0; }
+select, button, input[type=file] { font: inherit; color: var(--text-primary); }
+select { width: 100%; padding: 4px 6px; background: var(--surface-1); border: 1px solid var(--border); border-radius: 6px; }
+button { padding: 5px 10px; background: var(--surface-1); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: .45; cursor: default; }
+#drop { border: 1.5px dashed var(--border); border-radius: 8px; padding: 14px; text-align: center; cursor: pointer; }
+#drop.over { border-color: var(--accent); background: var(--row-hover); }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; border-right: 1px solid var(--border); }
+.seg button:last-child { border-right: 0; }
+.seg button.on { background: var(--accent); color: #fff; }
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.tile { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
+.tile .v { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tile .l { font-size: 11px; color: var(--text-secondary); }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: 0; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th { text-align: left; font-weight: 600; color: var(--text-secondary); font-size: 11px; padding: 4px 4px; border-bottom: 1px solid var(--border); }
+td { padding: 4px 4px; border-bottom: 1px solid var(--border); }
+td.n, th.n { text-align: right; }
+tbody tr { cursor: pointer; }
+tbody tr:hover { background: var(--row-hover); }
+code { font-size: 11.5px; }
+ul.plist { list-style: none; margin: 4px 0 12px; padding: 0; max-height: 220px; overflow-y: auto; }
+ul.plist li { padding: 4px 6px; border-bottom: 1px solid var(--border); cursor: pointer; }
+ul.plist li:hover { background: var(--row-hover); }
+ul.plist .cat { color: var(--text-muted); font-size: 11.5px; }
+h3 { font-size: 12.5px; margin: 10px 0 2px; }
+#legend {
+  position: absolute; right: 10px; bottom: 28px; z-index: 2; background: var(--surface-1);
+  border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 11.5px; min-width: 170px;
+}
+#legend .row { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
+#legend .sw { width: 14px; height: 10px; border-radius: 2px; }
+.maplibregl-popup-content { background: var(--surface-1); color: var(--text-primary); font-size: 12px; padding: 8px 10px; }
+.maplibregl-popup-tip { display: none; }
+.hidden { display: none !important; }
+.warn { color: #b3302f; }
+@media (max-width: 760px) {
+  body { grid-template-columns: 1fr; grid-template-rows: 55vh 45vh; }
+  #panel { order: 2; border-right: 0; border-top: 1px solid var(--border); }
+  #map { order: 1; }
+}
+</style>
+</head>
+<body>
+<aside id="panel">
+  <section>
+    <h1>POI Compare</h1>
+    <div class="muted small" id="meta">Loading…</div>
+  </section>
+
+  <section>
+    <h2>1 · Ground truth</h2>
+    <div id="drop">
+      <div><b>Drop a CSV or GeoJSON here</b></div>
+      <div class="muted small">or <u>choose a file</u>. It stays in your browser.</div>
+      <input type="file" id="file" accept=".csv,.txt,.json,.geojson" class="hidden">
+    </div>
+    <div id="gtStatus" class="small" style="margin-top:8px"></div>
+    <div id="mapping" class="hidden">
+      <label class="field"><span>Latitude</span><select id="colLat"></select></label>
+      <label class="field"><span>Longitude</span><select id="colLon"></select></label>
+      <label class="field"><span>Name</span><select id="colName"></select></label>
+      <label class="field"><span>Category</span><select id="colCat"></select></label>
+    </div>
+  </section>
+
+  <section>
+    <h2>2 · Compare</h2>
+    <label class="field"><span>Our group</span><select id="fGroup"></select></label>
+    <label class="field"><span>GT category</span><select id="fCat" disabled><option value="__all">All</option></select></label>
+    <label class="field"><span>Match within</span>
+      <select id="fRadius">
+        <option value="25">25 m</option><option value="50">50 m</option>
+        <option value="100" selected>100 m</option><option value="200">200 m</option>
+        <option value="500">500 m</option>
+      </select></label>
+    <label class="small" style="display:block;margin:6px 0 0">
+      <input type="checkbox" id="fNames" checked> Names must be similar
+      <span class="muted">(≥ <select id="fSim" style="width:auto;padding:0 2px">
+        <option value="0.3">30%</option><option value="0.5" selected>50%</option><option value="0.7">70%</option>
+      </select> alike)</span>
+    </label>
+    <div style="margin-top:10px">
+      <div class="small muted" style="margin-bottom:4px">Colour hexagons by</div>
+      <div class="seg" id="mode">
+        <button data-m="diff" disabled>Difference</button>
+        <button data-m="ours" class="on">Our POIs</button>
+        <button data-m="gt" disabled>Ground truth</button>
+      </div>
+    </div>
+    <label class="small" style="display:block;margin-top:10px">
+      <input type="checkbox" id="showPop"> Show population hexagons underneath
+    </label>
+  </section>
+
+  <section>
+    <h2>Summary</h2>
+    <div class="tiles">
+      <div class="tile"><div class="v" id="sOurs">–</div><div class="l"><span class="dot" style="background:var(--ours)"></span>Our POIs</div></div>
+      <div class="tile"><div class="v" id="sGt">–</div><div class="l"><span class="dot" style="background:var(--gt)"></span>Ground-truth POIs</div></div>
+      <div class="tile"><div class="v" id="sRecall">–</div><div class="l">of ground truth found in ours</div></div>
+      <div class="tile"><div class="v" id="sPrec">–</div><div class="l">of ours confirmed by ground truth</div></div>
+    </div>
+    <div class="small muted" id="sHex" style="margin-top:8px"></div>
+  </section>
+
+  <section id="gapsSec" class="hidden">
+    <h2>Biggest differences</h2>
+    <table>
+      <thead><tr><th>Hexagon</th><th class="n">Ours</th><th class="n">GT</th><th class="n">Matched</th><th class="n">GT − ours</th></tr></thead>
+      <tbody id="gaps"></tbody>
+    </table>
+    <div style="margin-top:10px"><button id="export">Export per-hexagon CSV</button></div>
+  </section>
+
+  <section id="selSec" class="hidden">
+    <h2>Selected hexagon</h2>
+    <div><code id="selId"></code> <button id="copyId" class="small" style="padding:1px 6px">copy</button></div>
+    <div class="small muted" id="selMeta" style="margin-top:4px"></div>
+    <h3 id="hPairs">Matched</h3><ul class="plist" id="lPairs"></ul>
+    <h3 id="hGtOnly"><span class="dot" style="background:var(--gt)"></span>Only in ground truth</h3><ul class="plist" id="lGtOnly"></ul>
+    <h3 id="hOursOnly"><span class="dot" style="background:var(--ours)"></span>Only in ours</h3><ul class="plist" id="lOursOnly"></ul>
+  </section>
+</aside>
+
+<div id="map">
+  <div id="legend"></div>
+</div>
+
+<script>
+"use strict";
+const CAMBODIA = [[102.3, 10.4], [107.7, 14.7]];
+const SEQ_BLUE = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95"];
+const SEQ_ORANGE = ["#fbd9c9", "#f6b596", "#f19064", "#eb6834", "#c24e20", "#8f3614"];
+const COUNT_BREAKS = [1, 2, 5, 10, 25, 50];            // lower bounds of each class
+const DIFF = { neg3: "#1c5cab", neg2: "#6da7ec", neg1: "#b7d3f6", zero: "#c9c7c0",
+               pos1: "#f5c0bf", pos2: "#ec8584", pos3: "#b3302f" };
+
+const S = {
+  res: 8, ours: [], gtRows: [], gtCols: [], gtKind: null, gt: [], pop: {},
+  group: "__all", cat: "__all", radius: 100, useNames: true, minSim: 0.5, mode: "ours", selected: null, cells: new Map(),
+  popBuilt: false,
+};
+const $ = (id) => document.getElementById(id);
+const fmt = (n) => n.toLocaleString("en-US");
+const pct = (a, b) => (b ? `${Math.round((100 * a) / b)}%` : "–");
+
+// ---------- data loading ----------
+async function init() {
+  const [pj, pop] = await Promise.all([
+    fetch("data/pois.json").then((r) => r.json()),
+    fetch("data/population.json").then((r) => r.json()).catch(() => ({})),
+  ]);
+  S.res = pj.meta.res;
+  S.pop = pop;
+  S.ours = pj.pois.map((p, i) => ({
+    i, lat: p[0], lng: p[1], name: p[2], category: p[3], group: p[4], id: p[5],
+    cell: h3.latLngToCell(p[0], p[1], S.res),
+  }));
+  $("meta").textContent =
+    `H3 resolution ${S.res} · ${fmt(S.ours.length)} POIs from ${pj.meta.sources.join(", ")} · reference date ${pj.meta.reference_date}`;
+  const gsel = $("fGroup");
+  gsel.append(new Option("All groups", "__all"));
+  for (const g of pj.meta.groups) {
+    const n = S.ours.filter((p) => p.group === g).length;
+    gsel.append(new Option(`${g} (${fmt(n)})`, g));
+  }
+  await mapReady;
+  recompute();
+}
+
+function detect(cols, patterns) {
+  for (const re of patterns) {
+    const hit = cols.find((c) => re.test(c.trim()));
+    if (hit) return hit;
+  }
+  return "";
+}
+
+function loadFile(file) {
+  $("gtStatus").textContent = `Reading ${file.name}…`;
+  const isJson = /\.(geo)?json$/i.test(file.name);
+  if (isJson) {
+    file.text().then((txt) => {
+      try { setRows(geojsonRows(JSON.parse(txt)), "geojson", file.name); }
+      catch (e) { $("gtStatus").innerHTML = `<span class="warn">Could not read JSON: ${e.message}</span>`; }
+    });
+  } else {
+    Papa.parse(file, {
+      header: true, skipEmptyLines: true,
+      complete: (r) => setRows(r.data, "csv", file.name),
+      error: (e) => { $("gtStatus").innerHTML = `<span class="warn">Could not read CSV: ${e.message}</span>`; },
+    });
+  }
+}
+
+function geojsonRows(gj) {
+  const feats = gj.type === "FeatureCollection" ? gj.features : Array.isArray(gj) ? gj : [gj];
+  const rows = [];
+  for (const f of feats) {
+    const g = f.geometry;
+    if (!g) continue;
+    let c = null;
+    if (g.type === "Point") c = g.coordinates;
+    else if (g.type === "MultiPoint") c = g.coordinates[0];
+    else if (g.type === "Polygon" || g.type === "MultiPolygon") {
+      const ring = g.type === "Polygon" ? g.coordinates[0] : g.coordinates[0][0];
+      c = [ring.reduce((s, p) => s + p[0], 0) / ring.length, ring.reduce((s, p) => s + p[1], 0) / ring.length];
+    }
+    if (c) rows.push({ ...(f.properties || {}), __lng: c[0], __lat: c[1] });
+  }
+  return rows;
+}
+
+function setRows(rows, kind, name) {
+  if (!rows.length) { $("gtStatus").innerHTML = `<span class="warn">${name}: no rows found.</span>`; return; }
+  S.gtRows = rows; S.gtKind = kind;
+  S.gtCols = Object.keys(rows[0]);
+  const opts = (sel, value, allowNone) => {
+    sel.innerHTML = "";
+    if (allowNone) sel.append(new Option("(none)", ""));
+    for (const c of S.gtCols) sel.append(new Option(c === "__lat" ? "(geometry lat)" : c === "__lng" ? "(geometry lon)" : c, c));
+    sel.value = value;
+  };
+  const cols = S.gtCols;
+  opts($("colLat"), kind === "geojson" ? "__lat" : detect(cols, [/^lat(itude)?$/i, /^y$/i, /lat/i]), false);
+  opts($("colLon"), kind === "geojson" ? "__lng" : detect(cols, [/^(lon|lng|long|longitude)$/i, /^x$/i, /lon|lng/i]), false);
+  opts($("colName"), detect(cols, [/^name$/i, /^name[_:]?en$/i, /name/i, /title/i]), true);
+  opts($("colCat"), detect(cols, [/^(category|type|class|group)$/i, /categ/i, /type/i, /amenity|class/i]), true);
+  $("mapping").classList.remove("hidden");
+  S.gtFileName = name;
+  buildGt();
+}
+
+function buildGt() {
+  const cLat = $("colLat").value, cLon = $("colLon").value, cName = $("colName").value, cCat = $("colCat").value;
+  const gt = []; let bad = 0, outside = 0;
+  S.gtRows.forEach((r, i) => {
+    const lat = parseFloat(String(r[cLat] ?? "").trim()), lng = parseFloat(String(r[cLon] ?? "").trim());
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) { bad++; return; }
+    if (lng < CAMBODIA[0][0] || lng > CAMBODIA[1][0] || lat < 9.8 || lat > CAMBODIA[1][1]) outside++;
+    gt.push({ i, lat, lng, name: cName ? String(r[cName] ?? "") : "", category: cCat ? String(r[cCat] ?? "") : "",
+              cell: h3.latLngToCell(lat, lng, S.res) });
+  });
+  S.gt = gt;
+  let msg = `<b>${S.gtFileName}</b>: ${fmt(gt.length)} points loaded`;
+  if (bad) msg += ` · <span class="warn">${fmt(bad)} rows without valid coordinates skipped</span>`;
+  if (outside) msg += ` · <span class="warn">${fmt(outside)} outside Cambodia's bounding box (check lat/lon columns)</span>`;
+  $("gtStatus").innerHTML = msg;
+
+  const counts = new Map();
+  for (const p of gt) counts.set(p.category, (counts.get(p.category) || 0) + 1);
+  const fc = $("fCat");
+  fc.innerHTML = ""; fc.append(new Option("All", "__all"));
+  [...counts.entries()].sort((a, b) => b[1] - a[1]).forEach(([c, n]) => fc.append(new Option(`${c || "(blank)"} (${fmt(n)})`, c)));
+  fc.disabled = !cCat;
+  $("fNames").disabled = !cName;
+  S.useNames = !!cName && $("fNames").checked;
+  S.cat = "__all";
+  document.querySelectorAll("#mode button").forEach((b) => (b.disabled = false));
+  if (S.mode === "ours") setMode("diff");
+  $("gapsSec").classList.remove("hidden");
+  recompute();
+  if (gt.length) {
+    const lats = gt.map((p) => p.lat), lngs = gt.map((p) => p.lng);
+    map.fitBounds([[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]], { padding: 40, maxZoom: 14 });
+  }
+}
+
+// ---------- matching ----------
+function metres(a, b) {
+  const R = 6371008.8, toRad = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * toRad, dLng = (b.lng - a.lng) * toRad;
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * toRad) * Math.cos(b.lat * toRad) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+
+// Name similarity: Dice coefficient on character trigrams of a normalized name.
+// Works for Latin and Khmer script alike; no transliteration.
+function normName(n) {
+  return String(n || "").normalize("NFKC").toLowerCase().replace(/[\p{P}\p{S}\s]+/gu, " ").trim();
+}
+function trigrams(n) {
+  const t = ` ${n} `, out = new Set();
+  for (let i = 0; i < t.length - 2; i++) out.add(t.slice(i, i + 3));
+  return out;
+}
+function tri(p) { return p._tri || (p._tri = trigrams(normName(p.name))); }
+function nameSim(a, b) {
+  const A = tri(a), B = tri(b);
+  if (A.size <= 1 || B.size <= 1) return 0; // blank names never confirm a match
+  let inter = 0;
+  for (const x of A) if (B.has(x)) inter++;
+  return (2 * inter) / (A.size + B.size);
+}
+
+function recompute() {
+  const ours = S.group === "__all" ? S.ours : S.ours.filter((p) => p.group === S.group);
+  const gt = S.cat === "__all" ? S.gt : S.gt.filter((p) => p.category === S.cat);
+  S.oursF = ours; S.gtF = gt;
+
+  // Greedy one-to-one matching by distance: closest pairs first.
+  const byCell = new Map();
+  for (const o of ours) { let a = byCell.get(o.cell); if (!a) byCell.set(o.cell, (a = [])); a.push(o); }
+  const k = S.radius > 300 ? 2 : 1;
+  const pairs = [];
+  for (const g of gt) {
+    for (const c of h3.gridDisk(g.cell, k)) {
+      const cand = byCell.get(c);
+      if (!cand) continue;
+      for (const o of cand) {
+        const d = metres(g, o);
+        if (d > S.radius) continue;
+        const sim = S.useNames ? nameSim(g, o) : null;
+        if (S.useNames && sim < S.minSim) continue;
+        pairs.push([d, g, o, sim]);
+      }
+    }
+  }
+  pairs.sort((a, b) => a[0] - b[0]);
+  const gMatch = new Map(), oMatch = new Map();
+  for (const [d, g, o, sim] of pairs) {
+    if (gMatch.has(g) || oMatch.has(o)) continue;
+    gMatch.set(g, { o, d, sim }); oMatch.set(o, { g, d, sim });
+  }
+  S.gMatch = gMatch; S.oMatch = oMatch;
+
+  // Per-cell stats
+  const cells = new Map();
+  const cell = (id) => { let c = cells.get(id); if (!c) cells.set(id, (c = { id, ours: [], gt: [], mG: 0, mO: 0 })); return c; };
+  for (const o of ours) { const c = cell(o.cell); c.ours.push(o); if (oMatch.has(o)) c.mO++; }
+  for (const g of gt) { const c = cell(g.cell); c.gt.push(g); if (gMatch.has(g)) c.mG++; }
+  S.cells = cells;
+
+  renderSummary();
+  renderMap();
+  renderGaps();
+  if (S.selected) selectCell(S.selected, false);
+}
+
+// ---------- panel ----------
+function renderSummary() {
+  const hasGt = S.gt.length > 0;
+  $("sOurs").textContent = fmt(S.oursF.length);
+  $("sGt").textContent = hasGt ? fmt(S.gtF.length) : "–";
+  $("sRecall").textContent = hasGt ? pct(S.gMatch.size, S.gtF.length) : "–";
+  $("sPrec").textContent = hasGt ? pct(S.oMatch.size, S.oursF.length) : "–";
+  let both = 0, onlyO = 0, onlyG = 0;
+  for (const c of S.cells.values()) {
+    if (c.ours.length && c.gt.length) both++; else if (c.ours.length) onlyO++; else onlyG++;
+  }
+  $("sHex").textContent = hasGt
+    ? `${fmt(S.cells.size)} hexagons with POIs: ${fmt(both)} in both, ${fmt(onlyO)} only ours, ${fmt(onlyG)} only ground truth. Matched = nearest pair within ${S.radius} m${S.useNames ? ` with names ≥ ${Math.round(S.minSim * 100)}% alike` : ""}, one-to-one.`
+    : `${fmt(S.cells.size)} hexagons contain our POIs. Load a ground-truth file to compare.`;
+}
+
+function renderGaps() {
+  const tb = $("gaps"); tb.innerHTML = "";
+  if (!S.gt.length) return;
+  const rows = [...S.cells.values()]
+    .map((c) => ({ c, diff: c.gt.length - c.ours.length }))
+    .sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff) || b.c.gt.length - a.c.gt.length)
+    .slice(0, 20);
+  for (const { c, diff } of rows) {
+    const tr = document.createElement("tr");
+    const cellTd = (t, cls) => { const td = document.createElement("td"); td.textContent = t; if (cls) td.className = cls; tr.append(td); };
+    cellTd(c.id.slice(0, 11) + "…"); cellTd(fmt(c.ours.length), "n"); cellTd(fmt(c.gt.length), "n"); cellTd(fmt(c.mG), "n");
+    cellTd((diff > 0 ? "+" : "") + fmt(diff), "n");
+    tr.title = c.id;
+    tr.onclick = () => { selectCell(c.id, true); };
+    tb.append(tr);
+  }
+}
+
+function li(list, text, sub, onClick) {
+  const el = document.createElement("li");
+  const t = document.createElement("div"); t.textContent = text || "(no name)";
+  const s = document.createElement("div"); s.className = "cat"; s.textContent = sub;
+  el.append(t, s); el.onclick = onClick; list.append(el);
+}
+
+function selectCell(id, fly) {
+  S.selected = id;
+  const c = S.cells.get(id) || { id, ours: [], gt: [], mG: 0, mO: 0 };
+  $("selSec").classList.remove("hidden");
+  $("selId").textContent = id;
+  const pop = S.pop[id];
+  $("selMeta").textContent =
+    `Population ${pop != null ? fmt(pop) : "0"} · ours ${fmt(c.ours.length)} · ground truth ${fmt(c.gt.length)} · matched ${fmt(c.mG)}`;
+  const flyTo = (p) => map.flyTo({ center: [p.lng, p.lat], zoom: 17.5 });
+
+  const lp = $("lPairs"), lg = $("lGtOnly"), lo = $("lOursOnly");
+  lp.innerHTML = lg.innerHTML = lo.innerHTML = "";
+  const matched = c.gt.filter((g) => S.gMatch.has(g));
+  for (const g of matched) {
+    const { o, d, sim } = S.gMatch.get(g);
+    const simTxt = sim == null ? "" : ` · names ${Math.round(sim * 100)}% alike`;
+    li(lp, `${g.name || "(no name)"}  ↔  ${o.name || "(no name)"}`, `${g.category || "–"} ↔ ${o.category} · ${Math.round(d)} m${simTxt}`, () => flyTo(g));
+  }
+  const gOnly = c.gt.filter((g) => !S.gMatch.has(g));
+  for (const g of gOnly) li(lg, g.name, g.category || "–", () => flyTo(g));
+  const oOnly = c.ours.filter((o) => !S.oMatch.has(o));
+  for (const o of oOnly) li(lo, o.name, `${o.category} · ${o.group}`, () => flyTo(o));
+  $("hPairs").textContent = `Matched (${matched.length})`;
+  $("hGtOnly").lastChild.textContent = `Only in ground truth (${gOnly.length})`;
+  $("hOursOnly").lastChild.textContent = `Only in ours (${oOnly.length})`;
+  for (const [el, n] of [[lp, matched.length], [lg, gOnly.length], [lo, oOnly.length]]) {
+    if (!n) { const e = document.createElement("li"); e.className = "cat"; e.textContent = "none"; el.append(e); }
+  }
+
+  if (!map.getSource("sel")) return;
+  const ring = h3.cellToBoundary(id, true);
+  map.getSource("sel").setData({ type: "Feature", geometry: { type: "Polygon", coordinates: [ring] }, properties: {} });
+  map.getSource("pairs").setData({
+    type: "FeatureCollection",
+    features: matched.map((g) => ({ type: "Feature", properties: {},
+      geometry: { type: "LineString", coordinates: [[g.lng, g.lat], [S.gMatch.get(g).o.lng, S.gMatch.get(g).o.lat]] } })),
+  });
+  if (fly) {
+    const [lat, lng] = h3.cellToLatLng(id);
+    map.flyTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), 15) });
+  }
+}
+
+// ---------- map ----------
+const map = new maplibregl.Map({
+  container: "map",
+  style: {
+    version: 8,
+    sources: { osm: { type: "raster", tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"], tileSize: 256, maxzoom: 19,
+                      attribution: "© OpenStreetMap contributors" } },
+    layers: [{ id: "osm", type: "raster", source: "osm", paint: { "raster-saturation": -0.7, "raster-opacity": 0.9 } }],
+  },
+  bounds: CAMBODIA, fitBoundsOptions: { padding: 20 },
+});
+map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
+
+const empty = { type: "FeatureCollection", features: [] };
+// Set up on style load (not "load", which also waits for the first rendered frame and
+// never fires while the tab is in the background).
+const mapReady = new Promise((resolve) => map.once("style.load", () => {
+  map.addSource("pop", { type: "geojson", data: empty });
+  map.addSource("hex", { type: "geojson", data: empty });
+  map.addSource("sel", { type: "geojson", data: empty });
+  map.addSource("pairs", { type: "geojson", data: empty });
+  map.addSource("ptsOurs", { type: "geojson", data: empty });
+  map.addSource("ptsGt", { type: "geojson", data: empty });
+  map.addLayer({ id: "pop-fill", type: "fill", source: "pop", layout: { visibility: "none" },
+    paint: { "fill-color": ["step", ["get", "p"], "#f0efec", 50, "#dedcd6", 200, "#c3c2b7", 1000, "#9a9890", 5000, "#6f6e68"],
+             "fill-opacity": 0.55 } });
+  // Fill fades as you zoom in so the basemap and individual POI points stay readable.
+  map.addLayer({ id: "hex-fill", type: "fill", source: "hex", paint: { "fill-color": "#999",
+    "fill-opacity": ["interpolate", ["linear"], ["zoom"], 10, 0.65, 13, 0.35, 15, 0.15] } });
+  map.addLayer({ id: "hex-line", type: "line", source: "hex", minzoom: 11,
+    paint: { "line-color": "#52514e", "line-width": ["interpolate", ["linear"], ["zoom"], 11, 0.3, 15, 1.2],
+             "line-opacity": 0.6 } });
+  map.addLayer({ id: "pairs", type: "line", source: "pairs", paint: { "line-color": "#52514e", "line-width": 1.5, "line-dasharray": [2, 1.5] } });
+  map.addLayer({ id: "pts-ours", type: "circle", source: "ptsOurs", minzoom: 12,
+    paint: { "circle-radius": ["interpolate", ["linear"], ["zoom"], 12, 3, 17, 7], "circle-color": "#2a78d6",
+             "circle-stroke-color": "#ffffff", "circle-stroke-width": 1.5,
+             "circle-opacity": ["case", ["get", "m"], 0.45, 1], "circle-stroke-opacity": ["case", ["get", "m"], 0.45, 1] } });
+  map.addLayer({ id: "pts-gt", type: "circle", source: "ptsGt", minzoom: 12,
+    paint: { "circle-radius": ["interpolate", ["linear"], ["zoom"], 12, 3, 17, 7], "circle-color": "#eb6834",
+             "circle-stroke-color": "#ffffff", "circle-stroke-width": 1.5,
+             "circle-opacity": ["case", ["get", "m"], 0.45, 1], "circle-stroke-opacity": ["case", ["get", "m"], 0.45, 1] } });
+  map.addLayer({ id: "sel", type: "line", source: "sel", paint: { "line-color": "#0d366b", "line-width": 3 } });
+
+  const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 10 });
+  map.on("mousemove", "hex-fill", (e) => {
+    map.getCanvas().style.cursor = "pointer";
+    const p = e.features[0].properties;
+    const pop = S.pop[p.cell];
+    const el = document.createElement("div");
+    const line = (t) => { const d = document.createElement("div"); d.textContent = t; el.append(d); };
+    line(`Ours ${fmt(p.ours)}` + (S.gt.length ? ` · ground truth ${fmt(p.gt)} · matched ${fmt(p.mG)}` : ""));
+    line(`Population ${pop != null ? fmt(pop) : 0}`);
+    popup.setLngLat(e.lngLat).setDOMContent(el).addTo(map);
+  });
+  map.on("mouseleave", "hex-fill", () => { map.getCanvas().style.cursor = ""; popup.remove(); });
+  map.on("click", "hex-fill", (e) => selectCell(e.features[0].properties.cell, false));
+  for (const layer of ["pts-ours", "pts-gt"]) {
+    map.on("mouseenter", layer, (e) => {
+      const p = e.features[0].properties;
+      const el = document.createElement("div");
+      const b = document.createElement("b"); b.textContent = p.name || "(no name)";
+      const s = document.createElement("div"); s.className = "muted"; s.textContent = `${layer === "pts-gt" ? "Ground truth" : "Ours"} · ${p.category}${p.m ? " · matched" : " · unmatched"}`;
+      el.append(b, s);
+      popup.setLngLat(e.features[0].geometry.coordinates).setDOMContent(el).addTo(map);
+    });
+    map.on("mouseleave", layer, () => popup.remove());
+  }
+  resolve();
+}));
+
+function stepExpr(prop, colors) {
+  const e = ["step", ["get", prop], "rgba(0,0,0,0)"];
+  COUNT_BREAKS.forEach((b, i) => e.push(b, colors[i]));
+  return e;
+}
+const diffExpr = ["step", ["get", "diff"], DIFF.neg3, -4, DIFF.neg2, -1, DIFF.neg1, 0, DIFF.zero, 1, DIFF.pos1, 2, DIFF.pos2, 5, DIFF.pos3];
+
+function renderMap() {
+  if (!map.getSource("hex")) return; // map not ready yet; init() re-runs recompute() after
+  const feats = [];
+  for (const c of S.cells.values()) {
+    feats.push({ type: "Feature", properties: { cell: c.id, ours: c.ours.length, gt: c.gt.length, mG: c.mG, diff: c.gt.length - c.ours.length },
+                 geometry: { type: "Polygon", coordinates: [h3.cellToBoundary(c.id, true)] } });
+  }
+  map.getSource("hex").setData({ type: "FeatureCollection", features: feats });
+  const pt = (arr, matched) => ({ type: "FeatureCollection", features: arr.map((p) => ({ type: "Feature",
+    properties: { name: p.name, category: p.category, m: matched.has(p) }, geometry: { type: "Point", coordinates: [p.lng, p.lat] } })) });
+  map.getSource("ptsOurs").setData(pt(S.oursF, S.oMatch));
+  map.getSource("ptsGt").setData(pt(S.gtF, S.gMatch));
+  map.setPaintProperty("hex-fill", "fill-color",
+    S.mode === "diff" ? diffExpr : S.mode === "gt" ? stepExpr("gt", SEQ_ORANGE) : stepExpr("ours", SEQ_BLUE));
+  renderLegend();
+}
+
+function renderLegend() {
+  const L = $("legend"); L.innerHTML = "";
+  const title = document.createElement("div");
+  title.style.fontWeight = "600"; title.style.marginBottom = "4px";
+  const row = (color, label) => {
+    const r = document.createElement("div"); r.className = "row";
+    const sw = document.createElement("span"); sw.className = "sw"; sw.style.background = color;
+    const t = document.createElement("span"); t.textContent = label;
+    r.append(sw, t); L.append(r);
+  };
+  if (S.mode === "diff") {
+    title.textContent = "Ground truth − ours, per hexagon"; L.append(title);
+    row(DIFF.pos3, "+5 or more (we miss POIs)"); row(DIFF.pos2, "+2 to +4"); row(DIFF.pos1, "+1");
+    row(DIFF.zero, "0 (same count)"); row(DIFF.neg1, "−1"); row(DIFF.neg2, "−2 to −4"); row(DIFF.neg3, "−5 or less (extra in ours)");
+  } else {
+    const colors = S.mode === "gt" ? SEQ_ORANGE : SEQ_BLUE;
+    title.textContent = S.mode === "gt" ? "Ground-truth POIs per hexagon" : "Our POIs per hexagon"; L.append(title);
+    const labels = ["1", "2–4", "5–9", "10–24", "25–49", "50+"];
+    labels.forEach((l, i) => row(colors[i], l));
+  }
+  const pts = document.createElement("div"); pts.className = "muted"; pts.style.marginTop = "6px";
+  pts.textContent = "Zoom in for points: faded = matched";
+  L.append(pts);
+  const p2 = document.createElement("div"); p2.className = "row";
+  p2.innerHTML = '<span class="dot" style="background:#2a78d6"></span>ours <span class="dot" style="background:#eb6834;margin-left:8px"></span>ground truth';
+  L.append(p2);
+}
+
+function setMode(m) {
+  S.mode = m;
+  document.querySelectorAll("#mode button").forEach((b) => b.classList.toggle("on", b.dataset.m === m));
+  if (map.getSource("hex")) {
+    map.setPaintProperty("hex-fill", "fill-color",
+      m === "diff" ? diffExpr : m === "gt" ? stepExpr("gt", SEQ_ORANGE) : stepExpr("ours", SEQ_BLUE));
+    renderLegend();
+  }
+}
+
+function togglePop(on) {
+  if (on && !S.popBuilt) {
+    const feats = Object.entries(S.pop).map(([cell, p]) => ({ type: "Feature", properties: { p },
+      geometry: { type: "Polygon", coordinates: [h3.cellToBoundary(cell, true)] } }));
+    map.getSource("pop").setData({ type: "FeatureCollection", features: feats });
+    S.popBuilt = true;
+  }
+  map.setLayoutProperty("pop-fill", "visibility", on ? "visible" : "none");
+}
+
+function exportCsv() {
+  const lines = ["h3,lat,lng,population,ours,ground_truth,matched_ground_truth,matched_ours,gt_minus_ours"];
+  for (const c of S.cells.values()) {
+    const [lat, lng] = h3.cellToLatLng(c.id);
+    lines.push([c.id, lat.toFixed(6), lng.toFixed(6), S.pop[c.id] ?? 0, c.ours.length, c.gt.length, c.mG, c.mO, c.gt.length - c.ours.length].join(","));
+  }
+  const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `poi_compare_res${S.res}_${S.group}_${S.radius}m.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ---------- wiring ----------
+const drop = $("drop"), fileIn = $("file");
+drop.onclick = () => fileIn.click();
+fileIn.onchange = () => fileIn.files[0] && loadFile(fileIn.files[0]);
+drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
+drop.ondragleave = () => drop.classList.remove("over");
+drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove("over"); if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]); };
+for (const id of ["colLat", "colLon", "colName", "colCat"]) $(id).onchange = buildGt;
+$("fGroup").onchange = (e) => { S.group = e.target.value; recompute(); };
+$("fCat").onchange = (e) => { S.cat = e.target.value; recompute(); };
+$("fRadius").onchange = (e) => { S.radius = +e.target.value; recompute(); };
+$("fNames").onchange = (e) => { S.useNames = e.target.checked && !!$("colName").value; recompute(); };
+$("fSim").onchange = (e) => { S.minSim = +e.target.value; recompute(); };
+document.querySelectorAll("#mode button").forEach((b) => (b.onclick = () => setMode(b.dataset.m)));
+$("showPop").onchange = (e) => togglePop(e.target.checked);
+$("export").onclick = exportCsv;
+$("copyId").onclick = () => navigator.clipboard?.writeText(S.selected || "");
+init().catch((e) => { $("meta").innerHTML = `<span class="warn">Could not load data: ${e.message}. Run <code>uv run kh-atlas app</code>.</span>`; });
+</script>
+</body>
+</html>

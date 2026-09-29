@@ -43,9 +43,16 @@ conventions and the **deviations from the brief** agreed with the user.
   gitignored.
 - `notebooks/` is exploration only, never imported by `src`.
 
+## Comparison app
+`kh-atlas app` exports POIs/population to `data/processed/app/` and serves `web/compare.html`
+(MapLibre + h3-js 4.5 + PapaParse from jsDelivr). User's ground truth is parsed client-side only.
+Matching: greedy one-to-one by distance, optional trigram name similarity (default on, >= 50%).
+
 ## Workflow
 Follow milestones in `docs/BRIEF.md` §11. Stop at each checkpoint and summarize for the user.
 Status: Milestones 1-3 done (boundary: 33 parts, 181,669 km²; grid res 8: 215,239 cells;
 population res 8: 17,951,035 of 17,951,445 raster total, -0.002%).
-Milestone 4 at checkpoint: OSM POIs 29,397 (88% in a group); draft category mapping
-awaiting user review. Next: Milestone 5 (features + export).
+Milestone 4: OSM POIs 29,397 (88% in a group); draft category groups in use.
+Milestone 5 done: features_res8 (215,239 x 43, data_gap 16,111), GeoPackage, CSV,
+qgis/kh_atlas.qgz (built with system PyQGIS, /usr/bin/python3). Next: user's ground-truth
+comparison (kh-atlas app), then Milestone 6/7.

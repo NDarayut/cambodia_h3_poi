@@ -4,9 +4,9 @@ A reproducible pipeline that divides Cambodia into [H3](https://h3geo.org) hexag
 open data to every hexagon: **population** (WorldPop) and **points of interest** (OpenStreetMap):
 schools, clinics, banks, pagodas, shops, restaurants and more.
 
-The result is a set of layers you can open in **QGIS**. In the next milestone it becomes a single
-**per-hexagon feature table** for mapping and modelling. Each hexagon will know its population,
-how many facilities of each type it has, and how many are nearby.
+The result is a **per-hexagon feature table** (one row per hexagon) for mapping and
+modelling. Each hexagon knows its population, how many facilities of each type it has, and how
+many are nearby. A styled **QGIS project** opens it straight away.
 
 ![WorldPop 2026 overview](notebooks/worldpop_overview.png)
 
@@ -38,8 +38,8 @@ how many facilities of each type it has, and how many are nearby.
 | 2 | Country boundary and H3 grid (res 8) | ✅ done |
 | 3 | Population per hexagon (WorldPop) | ✅ done |
 | 4 | POIs (OpenStreetMap) and category groups | ✅ done (category groups are a draft, under review) |
-| 5 | Per-hex feature table and export (GeoPackage, QGIS styles, project) | ⏳ next |
-| 6 | Optional extra POI sources and duplicate removal | planned |
+| 5 | Per-hex feature table and export (GeoPackage, CSV, styled QGIS project) | ✅ done |
+| 6 | Optional extra POI sources and duplicate removal | planned (skipped automatically with one source) |
 | 7 | Province/district/commune tagging and attribution file | planned |
 
 Current results (reference date **2026-09-23**, resolution 8):
@@ -50,6 +50,7 @@ Current results (reference date **2026-09-23**, resolution 8):
 | H3 grid, res 8 | 215,239 hexagons (~0.86 km² each over Cambodia) |
 | Population | 17,951,035 people in hexagons, vs 17,951,445 in the raster (−0.002%) |
 | POIs (OSM) | 29,397 inside Cambodia; 88% fall into one of 9 category groups |
+| Feature table | 215,239 rows × 43 columns; 16,111 hexagons flagged `data_gap` |
 
 The full design brief is in [`docs/BRIEF.md`](docs/BRIEF.md). Decisions that differ from it are
 listed in [`CLAUDE.md`](CLAUDE.md).
@@ -117,7 +118,7 @@ uv sync          # downloads Python 3.11 if needed and installs everything from 
 
 ```bash
 uv run kh-atlas --help     # lists all commands
-uv run pytest              # 16 tests; the first run downloads DuckDB's h3/spatial extensions
+uv run pytest              # 17 tests; the first run downloads DuckDB's h3/spatial extensions
 uv run kh-atlas sources    # checks the data sources are reachable for the reference date
 ```
 
@@ -150,6 +151,8 @@ uv run kh-atlas grid          # ~70 s
 uv run kh-atlas population    # downloads the 19 MB WorldPop raster, then ~10 s
 uv run kh-atlas poi-osm       # downloads the 41 MB OSM extract, then ~5 s
 uv run kh-atlas explore-categories   # prints POI category counts (helps edit the groups)
+uv run kh-atlas features      # per-hexagon feature table, ~2 s
+uv run kh-atlas export        # GeoPackage + CSV + styled QGIS project, ~10 s
 ```
 
 Or run everything in one go:
@@ -158,9 +161,8 @@ Or run everything in one go:
 uv run kh-atlas run-all
 ```
 
-`run-all` checks the sources, then runs every enabled stage. For now it stops with a message at
-the first stage that isn't built yet (`dedupe`, planned for a later milestone). All stages before
-it will have finished.
+`run-all` checks the sources, then runs every enabled stage through to `export`. `dedupe` is
+skipped automatically while only one POI source is enabled.
 
 Useful options:
 
@@ -197,7 +199,36 @@ data/
 │       ├── population_res8.gpkg             # populated hexagons only (125,410)
 │       └── poi_osm.gpkg                     # POI points
 └── processed/
+    ├── features_res8.parquet                # THE feature table (one row per hexagon)
+    ├── kh_atlas_res8.gpkg                   # same, with hexagon polygons (for QGIS)
+    ├── features_res8.csv                    # same, no geometry (Excel, pandas, R)
+    ├── app/                                 # comparison app files (kh-atlas app)
     └── manifest.json                        # sources, checksums, row counts, versions
+
+qgis/kh_atlas.qgz                            # styled QGIS project (built by `export`)
+```
+
+**Feature table columns** (`features_res8.*`, one row per hexagon):
+
+| Column | Meaning |
+|---|---|
+| `h3`, `h3_str` | H3 cell ID (number / text). CSV and GeoPackage have `h3_str` only. |
+| `lat`, `lng` | hexagon centre |
+| `population` | WorldPop 2026 estimate, people in the hexagon |
+| `n_poi` | all POIs in the hexagon |
+| `n_health`, `n_education`, `n_finance`, `n_religious`, `n_government`, `n_transport`, `n_food`, `n_lodging`, `n_retail`, `n_other` | POIs per category group (`config/poi_categories.yaml`); they add up to `n_poi` |
+| `poi_per_1k_pop` | `n_poi` per 1,000 people (empty when population is 0) |
+| `poi_category_entropy` | diversity of POI categories in the hexagon, in bits (0 = one type only; empty with no POIs) |
+| `population_k1`, `n_poi_k1`, `n_<group>_k1` | same counts summed over the hexagon **plus 1 ring** of neighbours (7 hexagons, ~1.5 km across) |
+| `population_k2`, `n_poi_k2`, `n_<group>_k2` | summed over the hexagon **plus 2 rings** (19 hexagons, ~2.5 km across): a simple "within reach" measure |
+| `data_gap` | `true` if ≥ 200 people but no POIs: probably unmapped, not "nothing there" |
+
+Example questions (QGIS: right-click layer → Filter…):
+
+```
+"population" >= 1000 AND "n_health_k2" = 0      -- 1,000+ people, no health POI within ~2.5 km
+"population" >= 1000 AND "n_finance_k2" = 0     -- ... no bank/ATM within ~2.5 km
+"data_gap"                                       -- populated but unmapped
 ```
 
 **POI table columns** (`poi_osm.parquet`):
@@ -218,7 +249,23 @@ data/
 
 ### 6.1 Open the ready-made project
 
-Two QGIS projects are in `qgis/`. Double-click one, or use QGIS → Project → Open:
+**Start with `qgis/kh_atlas.qgz`**, built by `uv run kh-atlas export` (needs QGIS installed,
+since it uses QGIS's own Python to style the layers). Layers, top to bottom:
+
+| Layer | Shows | On at start |
+|---|---|---|
+| POIs (osm) | POI points (appear when zoomed in past 1:250,000) | ✅ |
+| All hexagons (query this layer) | hexagon outlines when zoomed in; click with **Identify** to see all 43 columns | ✅ |
+| Service gaps → No health / education / finance POI within ~2.5 km | hexagons with 1,000+ people and no such POI within 2 rings | – |
+| Data gap | 200+ people, no POIs at all | – |
+| POIs per hexagon | `n_poi`, 1 / 2–4 / 5–9 / 10–24 / 25–99 / 100+ | – |
+| Population per hexagon | quantile classes, yellow → red | ✅ |
+| OpenStreetMap | basemap | ✅ |
+
+Tick a layer's box to show it. All hexagon layers are filtered views of the same file,
+`data/processed/kh_atlas_res8.gpkg`.
+
+Earlier exploration projects are also in `qgis/`:
 
 - `qgis/khm_poi_h3.qgz`: boundary, grid, population hexagons, POIs (OSM and Overture) and an
   OpenStreetMap basemap. Its layers are generated in `data/interim/qgis/` by the pipeline
@@ -271,6 +318,39 @@ Right-click `poi_osm` → **Filter…** to show one type of place:
 
 Use the **Identify Features** tool (the "i" cursor) to click a hexagon or point and see its
 values, and **Open Attribute Table** to sort and browse.
+
+### 6.5 Compare with your own POI data (comparison app)
+
+A small local web app shows the hexagons on a map and compares **our POIs** with a
+**ground-truth POI file** you provide, hexagon by hexagon.
+
+```bash
+uv run kh-atlas app          # then open http://127.0.0.1:8765/  (Ctrl+C to stop)
+uv run kh-atlas app --port 9000
+```
+
+1. **Load your file:** drag a **CSV** (needs latitude and longitude columns) or a **GeoJSON**
+   file onto the panel. Lat/lon/name/category columns are detected automatically; change them in
+   the dropdowns if needed. The file is read **in your browser only**; nothing is uploaded.
+2. **Pick what to compare:** *Our group* (e.g. `health`) and *GT category* (a value from your
+   category column), so you compare like with like.
+3. **Matching:** a ground-truth POI and one of ours count as the same place if they are within
+   *Match within* metres (default 100 m) and, with **Names must be similar** ticked, their names
+   are at least 50% alike (character-trigram similarity; works for Khmer and Latin script).
+   Each POI is matched at most once, closest pairs first. Distance-only matching overstates
+   agreement in dense city blocks, so keep the name check on when your file has names.
+4. **Read the map:** colour hexagons by **Difference** (ground truth − ours: red = we are
+   missing POIs, blue = we have extra), **Our POIs** or **Ground truth**. Zoom in to see the
+   points (blue = ours, orange = ground truth; faded = matched).
+5. **Inspect:** click a hexagon, or a row in *Biggest differences*, to list matched pairs (with
+   distance and name similarity), POIs only in the ground truth, and POIs only in ours. Click an
+   item to zoom to it.
+6. **Export:** *Export per-hexagon CSV* saves `h3, lat, lng, population, ours, ground_truth,
+   matched_ground_truth, matched_ours, gt_minus_ours` for further analysis (e.g. in QGIS: join
+   on `h3` with `population_res8`).
+
+Summary numbers: **"of ground truth found in ours"** (recall) and **"of ours confirmed by ground
+truth"** (precision). The app needs internet for the map tiles and JavaScript libraries.
 
 ---
 
@@ -331,6 +411,10 @@ retail.
 | `poi-osm` | OSM `.pbf` → `poi_osm.parquet` | Nodes and ways with a POI tag (amenity, shop, healthcare, office, tourism, …). Street furniture and airport internals are excluded. Kept only if inside Cambodia (fast grid match, then an exact point-in-country test). |
 | `poi-overture` | Overture places → `poi_overture.parquet` | Same schema, `confidence ≥ 0.6`, open places only. Disabled by default. |
 | `explore-categories` | POI tables → CSV and printout | Category counts per source. |
+| `dedupe` | POI tables → merged POIs | Skipped while only one POI source is enabled. Cross-source duplicate removal is planned. |
+| `features` | grid + population + POIs → `features_res8.parquet` | SQL: POI counts per group, per-1k ratio, category entropy, sums over `h3_grid_disk(k)` for k = 1, 2, data-gap flag. Checks: one row per grid cell, no duplicates, population and POI totals preserved. Logs the busiest hexagons (expected: Phnom Penh, Siem Reap, Battambang, Kampot, Sihanoukville). |
+| `export` | feature table → GeoPackage, CSV, `qgis/kh_atlas.qgz` | Hexagon polygons from `h3_cell_to_boundary_wkt`. The QGIS project is built by `src/kh_h3_atlas/qgis_project.py` under the system Python with PyQGIS; skipped with a warning if QGIS isn't installed. |
+| `app` | POI + population tables → `data/processed/app/` | Exports JSON for the comparison app and serves it locally (section 6.5). |
 
 Most processing is SQL run by DuckDB (`src/kh_h3_atlas/sql/`). Python is used only for reading
 the GeoTIFF (rasterio).
@@ -356,6 +440,9 @@ the GeoTIFF (rasterio).
 │   ├── download.py              # checksummed downloads
 │   ├── manifest.py              # run manifest, cache freshness
 │   ├── categories.py            # POI groups → SQL
+│   ├── app.py                   # comparison app export + local server
+│   ├── qgis_project.py          # builds qgis/kh_atlas.qgz (runs under system PyQGIS)
+│   ├── web/compare.html         # comparison app page
 │   ├── stages/                  # one module per stage
 │   └── sql/                     # SQL used by the stages
 ├── tests/                       # unit tests (no data downloads needed)
