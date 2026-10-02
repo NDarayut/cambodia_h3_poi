@@ -12,7 +12,7 @@ change, so check the output and scraper behavior periodically.
 ## Dataset snapshot
 
 The local `sale1.json` dataset was checked on **October 2, 2026** and contained
-**2,268 records with 2,268 unique property IDs**. It combines results collected
+**2,397 records with 2,397 unique property IDs**. It combines results collected
 from multiple sale-search pages and category filters. This is a point-in-time
 count; the total can change when the dataset is updated.
 
