@@ -11,10 +11,13 @@ change, so check the output and scraper behavior periodically.
 
 ## Dataset snapshot
 
-The local `sale1.json` dataset was checked on **October 2, 2026** and contained
-**2,397 records with 2,397 unique property IDs**. It combines results collected
-from multiple sale-search pages and category filters. This is a point-in-time
-count; the total can change when the dataset is updated.
+The local `sale1.json` dataset was checked on **October 6, 2026** and contained
+**5,010 records with 5,010 unique property IDs**. It combines results collected
+from sale-search pages, category searches, and location searches. All records
+in this snapshot have latitude and longitude values. See
+[`DATASET_SUMMARY.md`](DATASET_SUMMARY.md) for the listing-type, province, and
+property-type breakdown. Counts are point-in-time and can change as the
+dataset is updated.
 
 ## Features
 
